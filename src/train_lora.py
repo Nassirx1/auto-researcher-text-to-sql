@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,13 @@ from utils import ensure_dir, read_jsonl
 
 def format_training_text(example: dict[str, Any]) -> str:
     return build_prompt(example) + example["gold_sql"]
+
+
+def supported_kwargs(callable_obj: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
+    signature = inspect.signature(callable_obj)
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+        return kwargs
+    return {key: value for key, value in kwargs.items() if key in signature.parameters}
 
 
 def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
@@ -45,22 +53,39 @@ def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
         bias="none",
         task_type="CAUSAL_LM",
     )
-    sft_config = SFTConfig(
-        output_dir=str(exp_dir / "checkpoints"),
-        max_steps=int(training_cfg["max_steps"]),
-        learning_rate=float(training_cfg["learning_rate"]),
-        per_device_train_batch_size=int(training_cfg["per_device_train_batch_size"]),
-        gradient_accumulation_steps=int(training_cfg["gradient_accumulation_steps"]),
-        max_seq_length=int(training_cfg["max_seq_length"]),
-        warmup_ratio=float(training_cfg["warmup_ratio"]),
-        weight_decay=float(training_cfg["weight_decay"]),
-        logging_steps=int(training_cfg["logging_steps"]),
-        save_steps=int(training_cfg["save_steps"]),
-        fp16=bool(training_cfg.get("fp16", True)),
-        dataset_text_field="text",
-        report_to=[],
-    )
-    trainer = SFTTrainer(model=model, tokenizer=tokenizer, train_dataset=dataset, peft_config=peft_config, args=sft_config)
+    max_seq_length = int(training_cfg["max_seq_length"])
+    sft_kwargs = {
+        "output_dir": str(exp_dir / "checkpoints"),
+        "max_steps": int(training_cfg["max_steps"]),
+        "learning_rate": float(training_cfg["learning_rate"]),
+        "per_device_train_batch_size": int(training_cfg["per_device_train_batch_size"]),
+        "gradient_accumulation_steps": int(training_cfg["gradient_accumulation_steps"]),
+        "warmup_ratio": float(training_cfg["warmup_ratio"]),
+        "weight_decay": float(training_cfg["weight_decay"]),
+        "logging_steps": int(training_cfg["logging_steps"]),
+        "save_steps": int(training_cfg["save_steps"]),
+        "fp16": bool(training_cfg.get("fp16", True)),
+        "dataset_text_field": "text",
+        "report_to": [],
+    }
+    sft_signature = inspect.signature(SFTConfig)
+    if "max_seq_length" in sft_signature.parameters:
+        sft_kwargs["max_seq_length"] = max_seq_length
+    elif "max_length" in sft_signature.parameters:
+        sft_kwargs["max_length"] = max_seq_length
+    sft_config = SFTConfig(**supported_kwargs(SFTConfig, sft_kwargs))
+
+    trainer_kwargs = {
+        "model": model,
+        "train_dataset": dataset,
+        "peft_config": peft_config,
+        "args": sft_config,
+        "tokenizer": tokenizer,
+        "processing_class": tokenizer,
+        "dataset_text_field": "text",
+        "max_seq_length": max_seq_length,
+    }
+    trainer = SFTTrainer(**supported_kwargs(SFTTrainer, trainer_kwargs))
     result = trainer.train()
     trainer.model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
