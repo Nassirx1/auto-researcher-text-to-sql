@@ -39,6 +39,8 @@ training:
   logging_steps: 10
   save_steps: 100
   fp16: true
+  bf16: false
+  max_grad_norm: 0.0
 
 evaluation:
   max_new_tokens: 256

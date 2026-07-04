@@ -54,6 +54,8 @@ def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
         task_type="CAUSAL_LM",
     )
     max_seq_length = int(training_cfg["max_seq_length"])
+    use_bf16 = bool(training_cfg.get("bf16", False))
+    use_fp16 = bool(training_cfg.get("fp16", True)) and not use_bf16
     sft_kwargs = {
         "output_dir": str(exp_dir / "checkpoints"),
         "max_steps": int(training_cfg["max_steps"]),
@@ -64,7 +66,9 @@ def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
         "weight_decay": float(training_cfg["weight_decay"]),
         "logging_steps": int(training_cfg["logging_steps"]),
         "save_steps": int(training_cfg["save_steps"]),
-        "fp16": bool(training_cfg.get("fp16", True)),
+        "fp16": use_fp16,
+        "bf16": use_bf16,
+        "max_grad_norm": float(training_cfg.get("max_grad_norm", 0.0)),
         "dataset_text_field": "text",
         "report_to": [],
     }
