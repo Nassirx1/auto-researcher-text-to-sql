@@ -1,0 +1,47 @@
+project:
+  name: autoresearch-sql-slm
+  seed: 42
+
+paths:
+  data_dir: data
+  database_dir: data/databases
+  train_file: data/train.jsonl
+  eval_file: data/eval.jsonl
+  experiments_dir: experiments
+  best_dir: best
+  leaderboard_file: leaderboard.jsonl
+  research_log_file: research_log.md
+
+model:
+  model_id: null
+  load_in_4bit: false
+  torch_dtype: float16
+  device_map: auto
+
+lora:
+  r: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+
+training:
+  learning_rate: 0.0002
+  max_steps: 200
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 8
+  max_seq_length: 1024
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  logging_steps: 10
+  save_steps: 100
+  fp16: true
+
+evaluation:
+  max_new_tokens: 256
+  timeout_seconds: 10
+  include_sample_rows: false
+  sample_rows_per_table: 2

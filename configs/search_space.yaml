@@ -1,0 +1,33 @@
+learning_rate:
+  - 0.0001
+  - 0.0002
+  - 0.0003
+  - 0.0005
+
+lora_r:
+  - 4
+  - 8
+  - 16
+
+lora_alpha:
+  - 8
+  - 16
+  - 32
+
+lora_dropout:
+  - 0.0
+  - 0.05
+  - 0.1
+
+max_steps:
+  - 100
+  - 200
+  - 300
+
+max_seq_length:
+  - 512
+  - 1024
+
+gradient_accumulation_steps:
+  - 4
+  - 8

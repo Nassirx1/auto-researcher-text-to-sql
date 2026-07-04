@@ -1,0 +1,13 @@
+torch
+transformers
+datasets
+accelerate
+peft
+trl
+bitsandbytes
+pyyaml
+pandas
+numpy
+tqdm
+sqlparse
+scikit-learn

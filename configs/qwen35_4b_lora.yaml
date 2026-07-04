@@ -1,0 +1,11 @@
+inherits: base.yaml
+
+model:
+  model_id: Qwen/Qwen3.5-4B
+  load_in_4bit: true
+  torch_dtype: float16
+  device_map: auto
+
+training:
+  max_seq_length: 512
+  gradient_accumulation_steps: 8
