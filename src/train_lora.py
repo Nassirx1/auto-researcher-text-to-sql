@@ -56,7 +56,10 @@ def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
     )
     max_seq_length = int(training_cfg["max_seq_length"])
     use_bf16 = bool(training_cfg.get("bf16", False))
-    use_fp16 = bool(training_cfg.get("fp16", True)) and not use_bf16
+    use_fp16 = bool(training_cfg.get("fp16", False)) and not use_bf16
+    if config.get("model", {}).get("load_in_4bit", False) and not training_cfg.get("allow_amp_with_4bit", False):
+        use_fp16 = False
+        use_bf16 = False
     sft_kwargs = {
         "output_dir": str(exp_dir / "checkpoints"),
         "max_steps": int(training_cfg["max_steps"]),
