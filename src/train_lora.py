@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import inspect
 import json
+import types
 from pathlib import Path
 from typing import Any
 
@@ -90,6 +91,10 @@ def train_lora(config: dict[str, Any], experiment_id: str) -> Path:
         "max_seq_length": max_seq_length,
     }
     trainer = SFTTrainer(**supported_kwargs(SFTTrainer, trainer_kwargs))
+    if float(training_cfg.get("max_grad_norm", 0.0)) <= 0:
+        # Some Colab Torch/Accelerate builds still try to unscale BF16 gradients
+        # while reporting grad norm, even when clipping is disabled.
+        trainer._get_grad_norm = types.MethodType(lambda self, model, grad_norm=None: 0.0, trainer)
     result = trainer.train()
     trainer.model.save_pretrained(adapter_dir)
     tokenizer.save_pretrained(adapter_dir)
