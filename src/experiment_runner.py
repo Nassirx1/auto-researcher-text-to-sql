@@ -36,6 +36,7 @@ def synthetic_dry_report() -> dict[str, Any]:
         "mode": "dry_run",
         "total": 0,
         "execution_accuracy": 0.0,
+        "pass_at_k": 0.0,
         "syntax_validity": 0.0,
         "exact_result_match": 0.0,
         "timeout_count": 0,
@@ -49,11 +50,18 @@ def synthetic_dry_report() -> dict[str, Any]:
     }
 
 
-def run_one_experiment(base_config: dict[str, Any], search_space: dict[str, Any], dry_run: bool = False) -> dict[str, Any]:
+def run_one_experiment(
+    base_config: dict[str, Any],
+    search_space: dict[str, Any],
+    dry_run: bool = False,
+    num_candidates: int | None = None,
+) -> dict[str, Any]:
     leaderboard = load_leaderboard(base_config["paths"]["leaderboard_file"])
     experiment_id = next_experiment_id(base_config["paths"]["experiments_dir"])
     proposal = propose_config_change(base_config, leaderboard, search_space, seed=int(base_config["project"]["seed"]))
     experiment_config = apply_changes(base_config, proposal["changes"])
+    if num_candidates:
+        experiment_config.setdefault("evaluation", {})["num_candidates"] = num_candidates
     exp_dir = ensure_dir(Path(base_config["paths"]["experiments_dir"]) / experiment_id)
     config_path = exp_dir / "config.yaml"
     save_yaml(config_path, experiment_config)
@@ -67,7 +75,7 @@ def run_one_experiment(base_config: dict[str, Any], search_space: dict[str, Any]
     else:
         adapter_path = train_lora(experiment_config, experiment_id)
         examples = read_jsonl(experiment_config["paths"]["eval_file"])
-        predictions = generate_predictions(experiment_config, examples, adapter_path=str(adapter_path))
+        predictions = generate_predictions(experiment_config, examples, adapter_path=str(adapter_path), num_candidates=num_candidates)
         report, details = evaluate_examples(experiment_config, examples, predictions, mode="adapter")
         save_report(experiment_config, report, details, experiment_id)
         metrics_path = exp_dir / "training_metrics.json"
@@ -104,13 +112,14 @@ def main() -> None:
     parser.add_argument("--config", default="configs/qwen25_coder_3b_lora.yaml")
     parser.add_argument("--search_space", default="configs/search_space.yaml")
     parser.add_argument("--n_experiments", type=int, default=1)
+    parser.add_argument("--num_candidates", type=int)
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
     base_config = load_config(args.config)
     search_space = load_yaml(args.search_space)
     results = []
     for _ in range(args.n_experiments):
-        result = run_one_experiment(base_config, search_space, dry_run=args.dry_run)
+        result = run_one_experiment(base_config, search_space, dry_run=args.dry_run, num_candidates=args.num_candidates)
         results.append(result)
         print(json.dumps(result, indent=2))
     print(f"Completed {len(results)} experiment(s).")

@@ -44,6 +44,9 @@ training:
 
 evaluation:
   max_new_tokens: 256
+  num_candidates: 1
+  temperature: 0.3
+  top_p: 0.95
   timeout_seconds: 10
   include_sample_rows: false
   sample_rows_per_table: 2

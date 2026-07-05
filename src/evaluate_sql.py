@@ -94,22 +94,41 @@ def evaluate_examples(
         "execution_correct": 0,
         "syntax_valid": 0,
         "exact_match": 0,
+        "candidate_pass": 0,
         "timeout_count": 0,
         "error_count": 0,
     }
     buckets: dict[str, list[bool]] = {key: [] for key in ["easy", "medium", "hard", "ecommerce", "saas", "banking"]}
     for example in examples:
         counts["total"] += 1
-        sql = example["gold_sql"] if mode == "gold" else by_id.get(example["id"], {}).get("pred_sql", "")
+        prediction = by_id.get(example["id"], {})
+        sql = example["gold_sql"] if mode == "gold" else prediction.get("pred_sql", "")
         db_path = db_path_for(config, example["db_id"])
         result = execute_sql(db_path, sql, timeout)
         expected = example["expected_result"]
         correct = result["ok"] and compare_results(result["rows"], expected, example["gold_sql"])
+        candidate_details = []
+        candidate_correct = correct
+        for candidate in prediction.get("candidates", []):
+            candidate_sql = candidate.get("sql", "")
+            candidate_result = execute_sql(db_path, candidate_sql, timeout)
+            candidate_ok = candidate_result["ok"] and compare_results(candidate_result["rows"], expected, example["gold_sql"])
+            candidate_correct = candidate_correct or candidate_ok
+            candidate_details.append(
+                {
+                    "sql": candidate_sql,
+                    "raw_output": candidate.get("raw_output", ""),
+                    "ok": candidate_result["ok"],
+                    "correct": candidate_ok,
+                    "error": candidate_result["error"],
+                }
+            )
         syntax_valid = result["ok"]
         exact_match = sql.strip().rstrip(";") == example["gold_sql"].strip().rstrip(";")
         counts["execution_correct"] += int(correct)
         counts["syntax_valid"] += int(syntax_valid)
         counts["exact_match"] += int(exact_match)
+        counts["candidate_pass"] += int(candidate_correct)
         counts["timeout_count"] += int(result["error"] == "timeout")
         counts["error_count"] += int(not result["ok"])
         buckets[example["difficulty"]].append(correct)
@@ -119,6 +138,7 @@ def evaluate_examples(
                 "id": example["id"],
                 "db_id": example["db_id"],
                 "difficulty": example["difficulty"],
+                "question": example.get("question", ""),
                 "gold_sql": example["gold_sql"],
                 "pred_sql": sql,
                 "ok": result["ok"],
@@ -126,6 +146,7 @@ def evaluate_examples(
                 "error": result["error"],
                 "result": result["rows"],
                 "expected_result": expected,
+                "candidates": candidate_details,
             }
         )
     total = max(counts["total"], 1)
@@ -135,6 +156,8 @@ def evaluate_examples(
         "execution_accuracy": counts["execution_correct"] / total,
         "syntax_validity": counts["syntax_valid"] / total,
         "exact_result_match": counts["execution_correct"] / total,
+        "pass_at_k": counts["candidate_pass"] / total,
+        "num_candidates": int(config.get("evaluation", {}).get("num_candidates", 1)),
         "timeout_count": counts["timeout_count"],
         "error_count": counts["error_count"],
     }
@@ -180,13 +203,21 @@ def main() -> None:
     parser.add_argument("--mode", choices=["gold", "baseline", "adapter"], required=True)
     parser.add_argument("--adapter_path")
     parser.add_argument("--experiment_id")
+    parser.add_argument("--num_candidates", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
+    if args.num_candidates:
+        config.setdefault("evaluation", {})["num_candidates"] = args.num_candidates
     if args.mode == "gold":
         report, details = validate_gold_dataset(config)
     else:
         examples = read_jsonl(config["paths"]["eval_file"])
-        predictions = generate_predictions(config, examples, adapter_path=args.adapter_path if args.mode == "adapter" else None)
+        predictions = generate_predictions(
+            config,
+            examples,
+            adapter_path=args.adapter_path if args.mode == "adapter" else None,
+            num_candidates=args.num_candidates,
+        )
         report, details = evaluate_examples(config, examples, predictions, mode=args.mode)
     exp_dir = save_report(config, report, details, args.experiment_id)
     print(json.dumps(report, indent=2))

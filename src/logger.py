@@ -52,6 +52,7 @@ def make_leaderboard_row(
         "hypothesis": hypothesis,
         "config_changes": config_changes,
         "execution_accuracy": report.get("execution_accuracy", 0.0),
+        "pass_at_k": report.get("pass_at_k", report.get("execution_accuracy", 0.0)),
         "syntax_validity": report.get("syntax_validity", 0.0),
         "easy_accuracy": report.get("easy_accuracy", 0.0),
         "medium_accuracy": report.get("medium_accuracy", 0.0),

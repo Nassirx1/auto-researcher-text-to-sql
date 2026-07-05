@@ -55,6 +55,7 @@ def generate_predictions(
     examples: list[dict[str, Any]],
     adapter_path: str | None = None,
     batch_size: int = 1,
+    num_candidates: int | None = None,
 ) -> list[dict[str, Any]]:
     from load_model import load_base_model, load_model_with_adapter
 
@@ -62,19 +63,36 @@ def generate_predictions(
         model, tokenizer = load_model_with_adapter(config, adapter_path)
     else:
         model, tokenizer = load_base_model(config)
-    max_new_tokens = int(config.get("evaluation", {}).get("max_new_tokens", 256))
+    eval_cfg = config.get("evaluation", {})
+    max_new_tokens = int(eval_cfg.get("max_new_tokens", 256))
+    candidate_count = int(num_candidates or eval_cfg.get("num_candidates", 1))
+    temperature = float(eval_cfg.get("temperature", 0.3))
+    top_p = float(eval_cfg.get("top_p", 0.95))
     predictions = []
     for example in examples:
         prompt = build_prompt(example)
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-        output_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=tokenizer.eos_token_id,
+        generation_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "do_sample": candidate_count > 1,
+            "num_return_sequences": candidate_count,
+            "pad_token_id": tokenizer.eos_token_id,
+        }
+        if candidate_count > 1:
+            generation_kwargs.update({"temperature": temperature, "top_p": top_p})
+        output_ids = model.generate(**inputs, **generation_kwargs)
+        candidates = []
+        for output in output_ids:
+            raw_output = tokenizer.decode(output[inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+            candidates.append({"raw_output": raw_output, "sql": extract_sql(raw_output)})
+        predictions.append(
+            {
+                "id": example["id"],
+                "db_id": example["db_id"],
+                "pred_sql": candidates[0]["sql"] if candidates else "",
+                "candidates": candidates,
+            }
         )
-        generated = tokenizer.decode(output_ids[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        predictions.append({"id": example["id"], "db_id": example["db_id"], "pred_sql": extract_sql(generated)})
     return predictions
 
 
@@ -84,10 +102,11 @@ def main() -> None:
     parser.add_argument("--input", default="data/eval.jsonl")
     parser.add_argument("--output", default="experiments/predictions.jsonl")
     parser.add_argument("--adapter_path")
+    parser.add_argument("--num_candidates", type=int)
     args = parser.parse_args()
     config = load_config(args.config)
     examples = read_jsonl(args.input)
-    predictions = generate_predictions(config, examples, adapter_path=args.adapter_path)
+    predictions = generate_predictions(config, examples, adapter_path=args.adapter_path, num_candidates=args.num_candidates)
     write_jsonl(args.output, predictions)
     print(f"Wrote {len(predictions)} predictions to {args.output}")
 

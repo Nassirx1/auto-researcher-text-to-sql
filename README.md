@@ -143,9 +143,32 @@ python src/experiment_runner.py --config configs/qwen25_coder_3b_lora.yaml --n_e
 
 The v0.1 research agent is rule-based. It reads prior leaderboard rows, proposes one or two config changes from `configs/search_space.yaml`, saves a hypothesis, trains, evaluates, logs results, and promotes the best adapter based on execution accuracy with hard accuracy, syntax validity, and error count as tie-breakers.
 
+For deeper inspection, generate multiple SQL candidates per eval question:
+
+```bash
+python src/experiment_runner.py --config configs/qwen25_coder_3b_lora.yaml --n_experiments 1 --num_candidates 10
+```
+
+The primary score remains the first generated SQL query. `pass_at_k` reports whether any of the generated candidates matched the gold result.
+
+## Experiment Inspection
+
+Summarize improvement, deltas, best experiment, and Qwen SQL samples:
+
+```bash
+python src/summarize_experiments.py
+```
+
+Audit dataset hardness and relational complexity:
+
+```bash
+python src/audit_dataset.py
+```
+
 ## Metrics
 
 - `execution_accuracy`: fraction of examples whose generated SQL result matches the gold result.
+- `pass_at_k`: with multi-candidate generation, fraction where at least one candidate SQL matches the gold result.
 - `syntax_validity`: fraction of generated SQL queries that execute safely.
 - `exact_result_match`: same result comparison as execution accuracy.
 - `timeout_count`: queries exceeding the configured timeout.
